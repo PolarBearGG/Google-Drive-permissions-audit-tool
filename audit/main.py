@@ -3,6 +3,8 @@ import os.path
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 import pandas as pd
+from multiprocessing import Pool
+from itertools import chain
 
 # 1) Creating a service account - https://developers.google.com/identity/protocols/oauth2/service-account#creatinganaccount
 # 2) Delegating domain-wide authority to the service account - https://developers.google.com/identity/protocols/oauth2/service-account#delegatingauthority
@@ -12,7 +14,7 @@ import pandas as pd
 SCOPES = ['https://www.googleapis.com/auth/drive.metadata.readonly']
 
 """Authorization under the email from which we conduct the audit"""
-email = 'example@email.com'
+email = 'test@abc.com'
 
 
 def mainAuthorization(email):
@@ -29,52 +31,62 @@ def mainAuthorization(email):
 
 
 def mainCredentials(fileId):
+    results = []
     service = mainAuthorization(email)
-    results = service.permissions().list(
-        fileId=fileId,
-        pageSize=100,
-        fields="nextPageToken,kind,permissions,permissions(id,displayName,type,kind,role,emailAddress)"
-    ).execute()
-    return results['permissions']
-
-
-"""Get a list of files in one page and a nextPageToken for pagination"""
-
-
-def mainFiles(nextPageToken=None):
-    service = mainAuthorization(email)
-    results = service.files().list(
-        pageToken=nextPageToken,
-        pageSize=100,
-        fields="nextPageToken, files(id, name)"
-    ).execute()
-    items = results.get('files', [])
     try:
-        pageToken = results['nextPageToken']
+        response = service.permissions().list(
+            fileId=fileId,
+            pageToken=None,
+            pageSize=100,
+            fields="nextPageToken,kind,permissions,permissions(id,displayName,type,kind,role,emailAddress)"
+        ).execute()
+        results = response.get('permissions', [])
     except:
-        pageToken = None
-    return items, pageToken
+        pass
+    try:
+        while 'nextPageToken' in response:
+            response = service.permissions().list(
+                fileId=fileId,
+                pageToken=response.get('nextPageToken', []),
+                pageSize=100,
+                fields="nextPageToken,kind,permissions,permissions(id,displayName,type,kind,role,emailAddress)"
+            ).execute()
+            results.extend(response.get('files', []))
+    except:
+        pass
+    df = pd.DataFrame(results)
+    if not df.empty:
+        df['fileId'] = fileId
+    return df
 
 
 """Get a list of all files on account"""
 
 
 def mainAllFiles():
-    df_all_files = []
-    newPageToken = ''
-    while newPageToken is not None:
-        df, pageToken = mainFiles(newPageToken)
-        newPageToken = pageToken
-        df_all_files = df_all_files + df
-    return pd.DataFrame(df_all_files)
+    results = []
+    service = mainAuthorization(email)
+    response = service.files().list(
+        pageToken=None,
+        pageSize=100,
+        fields="nextPageToken, files(id, name)"
+    ).execute()
+    results = response.get('files', [])
+    while 'nextPageToken' in response:
+        response = service.files().list(
+            pageToken=response.get('nextPageToken', []),
+            pageSize=100,
+            fields='nextPageToken, files(id, name)'
+        ).execute()
+        results.extend(response.get('files', []))
+    return pd.DataFrame(results)
 
 
-"""The main function that stores all permissions to all files in Good Data excel table
-and stores in Bad Data excel table all files in which it is impossible to view permissions"""
+"""The main function that stores all permissions to all files in excel table"""
 
 
 def main():
-    df_good = pd.DataFrame(
+    df_all = pd.DataFrame(
         columns=[
             'id',
             'displayName',
@@ -85,29 +97,13 @@ def main():
             'allowFileDiscovery',
             'fileId'
         ])
-    df_bad = pd.DataFrame(
-        columns=[
-            'message'
-        ])
-    print('Start extracting all file ids...')
     ids = mainAllFiles()
-    print('Finish extracting all file ids...')
-    print('Creating a DataFrame...')
-    for id in ids['id']:
-        try:
-            df = pd.DataFrame(mainCredentials(id))
-            df['fileId'] = id
-            df_good = pd.concat([df_good, df], ignore_index=True)
-        except:
-            df_msg = pd.DataFrame(
-                {'message':
-                    [f'You do not have permission to access this file metadata from {email}: https://drive.google.com/open?id={id}']})
-            df_bad = pd.concat([df_bad, df_msg], ignore_index=True)
-    print('Start saving all the data to excel file...')
-    with pd.ExcelWriter(f'credentialsAudit_{email}.xlsx') as writer:
-        df_good.to_excel(writer, sheet_name='Good Data')
-        df_bad.to_excel(writer, sheet_name='Bad Data')
-    print('Finish saving all the data to excel file...')
+    p = Pool(os.cpu_count())
+    df_pool = p.map(mainCredentials, ids['id'])
+    for df in df_pool:
+        if not df.empty:
+            df_all = pd.concat([df_all, df], ignore_index=True)
+    df_all.to_excel(f'credentialsAudit_{email}.xlsx')
 
 
 if __name__ == '__main__':
