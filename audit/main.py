@@ -4,7 +4,6 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 import pandas as pd
 from multiprocessing import Pool
-from itertools import chain
 
 # 1) Creating a service account - https://developers.google.com/identity/protocols/oauth2/service-account#creatinganaccount
 # 2) Delegating domain-wide authority to the service account - https://developers.google.com/identity/protocols/oauth2/service-account#delegatingauthority
@@ -108,3 +107,8 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+# TODO: mainCredentials try - except problem
+# TODO: add bad files
+# TODO: test on a big Google Drive account
