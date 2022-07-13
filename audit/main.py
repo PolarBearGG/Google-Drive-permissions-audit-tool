@@ -12,16 +12,17 @@ from multiprocessing import Pool
 
 SCOPES = ['https://www.googleapis.com/auth/drive.metadata.readonly']
 
-"""Authorization under the email from which we conduct the audit"""
-email = 'test@abc.com'
+"""Authorization under the EMAIL from which we conduct the audit"""
+
+EMAIL = 'm.maksymiv@magneticone.com'
 
 
-def mainAuthorization(email):
+def mainAuthorization(EMAIL):
     credentials = None
     if os.path.exists('service_account.json'):
         credentials = service_account.Credentials.from_service_account_file(
             'service_account.json', scopes=SCOPES)
-        delegated_credentials = credentials.with_subject(email)
+        delegated_credentials = credentials.with_subject(EMAIL)
         service = build('drive', 'v3', credentials=delegated_credentials)
         return service
 
@@ -31,7 +32,7 @@ def mainAuthorization(email):
 
 def mainCredentials(fileId):
     results = []
-    service = mainAuthorization(email)
+    service = mainAuthorization(EMAIL)
     try:
         response = service.permissions().list(
             fileId=fileId,
@@ -64,7 +65,7 @@ def mainCredentials(fileId):
 
 def mainAllFiles():
     results = []
-    service = mainAuthorization(email)
+    service = mainAuthorization(EMAIL)
     response = service.files().list(
         pageToken=None,
         pageSize=100,
@@ -81,28 +82,15 @@ def mainAllFiles():
     return pd.DataFrame(results)
 
 
-"""The main function that stores all permissions to all files in excel table"""
+"""The main function that stores all permissions to all files in csv file"""
 
 
 def main():
-    df_all = pd.DataFrame(
-        columns=[
-            'id',
-            'displayName',
-            'type',
-            'kind',
-            'role',
-            'emailAddress',
-            'allowFileDiscovery',
-            'fileId'
-        ])
     ids = mainAllFiles()
     p = Pool(os.cpu_count())
     df_pool = p.map(mainCredentials, ids['id'])
-    for df in df_pool:
-        if not df.empty:
-            df_all = pd.concat([df_all, df], ignore_index=True)
-    df_all.to_excel(f'credentialsAudit_{email}.xlsx')
+    df_all = pd.concat(df_pool, ignore_index=True)
+    df_all.to_csv(f'credentialsAudit_{EMAIL}.csv', index=False)
 
 
 if __name__ == '__main__':
@@ -111,4 +99,3 @@ if __name__ == '__main__':
 
 # TODO: mainCredentials try - except problem
 # TODO: add bad files
-# TODO: test on a big Google Drive account
