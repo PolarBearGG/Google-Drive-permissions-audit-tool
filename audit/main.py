@@ -15,7 +15,7 @@ SCOPES = ['https://www.googleapis.com/auth/drive.metadata.readonly']
 
 """Authorization under the EMAIL from which we conduct the audit"""
 
-EMAIL = 'm.maksymiv@magneticone.com'
+EMAIL = 'test@abc.com'
 
 
 def mainAuthorization(EMAIL):
