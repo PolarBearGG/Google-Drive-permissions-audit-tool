@@ -9,6 +9,7 @@ from multiprocessing import Pool
 # 2) Delegating domain-wide authority to the service account - https://developers.google.com/identity/protocols/oauth2/service-account#delegatingauthority
 # 3) Change Email in email variable
 # 4) Run this main.py script
+# 5) In the test, the execution of the script with 139316 files took around 2 hours
 
 SCOPES = ['https://www.googleapis.com/auth/drive.metadata.readonly']
 
